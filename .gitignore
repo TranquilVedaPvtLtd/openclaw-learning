@@ -1,0 +1,22 @@
+# regenerable / environment
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.next/
+.DS_Store
+.pytest_cache/
+
+# secrets - never commit
+.env
+.env.*
+!.env.example
+!.env.sample
+.mcp.json
+credentials.json
+token.json
+*.pem
+*.key
+
+# oversized for GitHub (kept in the encrypted Google Drive backup)

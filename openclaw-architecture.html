@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw Architecture — Complete Deep Dive</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2333;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #f85149;
+    --accent2: #58a6ff;
+    --accent3: #3fb950;
+    --accent4: #d2a8ff;
+    --accent5: #f0883e;
+    --accent6: #79c0ff;
+    --accent7: #ffa657;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+
+  /* Navigation */
+  .nav { position: fixed; top: 0; left: 0; width: 280px; height: 100vh; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 20px 0; z-index: 100; }
+  .nav-logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 15px; }
+  .nav-logo h2 { color: var(--accent); font-size: 18px; }
+  .nav-logo span { color: var(--text-dim); font-size: 12px; }
+  .nav a { display: block; padding: 8px 20px; color: var(--text-dim); text-decoration: none; font-size: 13px; transition: all 0.2s; border-left: 3px solid transparent; }
+  .nav a:hover, .nav a.active { color: var(--accent2); background: rgba(88,166,255,0.05); border-left-color: var(--accent2); }
+  .nav-section { padding: 10px 20px 5px; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+
+  /* Main Content */
+  .main { margin-left: 280px; padding: 40px 60px; max-width: 1200px; }
+
+  h1 { font-size: 42px; color: var(--accent); margin-bottom: 10px; }
+  h2 { font-size: 28px; color: var(--accent2); margin: 50px 0 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 20px; color: var(--accent4); margin: 30px 0 15px; }
+  h4 { font-size: 16px; color: var(--accent5); margin: 20px 0 10px; }
+  p { margin-bottom: 15px; color: var(--text); }
+
+  .subtitle { color: var(--text-dim); font-size: 18px; margin-bottom: 40px; }
+
+  /* Boxes */
+  .layman { background: linear-gradient(135deg, #1a2332, #162030); border: 1px solid #1f4068; border-radius: 12px; padding: 25px; margin: 20px 0; position: relative; }
+  .layman::before { content: "Layman's Terms"; position: absolute; top: -10px; left: 20px; background: #1f4068; color: #79c0ff; padding: 2px 12px; border-radius: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+  .layman p { color: #a8d8ff; }
+
+  .technical { background: linear-gradient(135deg, #1a1a2e, #16213e); border: 1px solid #533483; border-radius: 12px; padding: 25px; margin: 20px 0; position: relative; }
+  .technical::before { content: "Technical Deep-Dive"; position: absolute; top: -10px; left: 20px; background: #533483; color: #d2a8ff; padding: 2px 12px; border-radius: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+  .technical p, .technical li { color: #c8b8ff; }
+
+  .key-insight { background: linear-gradient(135deg, #1a2a1a, #162e16); border: 1px solid #238636; border-radius: 12px; padding: 25px; margin: 20px 0; position: relative; }
+  .key-insight::before { content: "Key Insight"; position: absolute; top: -10px; left: 20px; background: #238636; color: #3fb950; padding: 2px 12px; border-radius: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+  .key-insight p { color: #a8f0b8; }
+
+  /* Diagrams */
+  .diagram-container { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 30px; margin: 25px 0; overflow-x: auto; }
+  .diagram-title { text-align: center; color: var(--accent5); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px; }
+
+  svg text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+  /* Code blocks */
+  code { background: var(--surface2); color: var(--accent7); padding: 2px 8px; border-radius: 4px; font-size: 14px; }
+  pre { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 20px; overflow-x: auto; margin: 15px 0; }
+  pre code { background: none; padding: 0; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+  th { background: var(--surface2); color: var(--accent2); padding: 12px 16px; text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid var(--accent2); }
+  td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text); font-size: 14px; }
+  tr:hover td { background: rgba(88,166,255,0.03); }
+
+  /* Lists */
+  ul, ol { margin: 10px 0 15px 25px; }
+  li { margin: 6px 0; color: var(--text); }
+
+  /* Stats bar */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin: 30px 0; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
+  .stat-num { font-size: 32px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-top: 5px; }
+
+  /* Flow items */
+  .flow-step { display: flex; align-items: flex-start; margin: 15px 0; }
+  .flow-num { min-width: 36px; height: 36px; background: var(--accent2); color: var(--bg); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; margin-right: 15px; flex-shrink: 0; }
+  .flow-content h4 { margin: 0 0 5px; color: var(--text); font-size: 15px; }
+  .flow-content p { margin: 0; color: var(--text-dim); font-size: 14px; }
+
+  /* Component cards */
+  .components { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin: 20px 0; }
+  .component { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 25px; transition: border-color 0.3s; }
+  .component:hover { border-color: var(--accent2); }
+  .component h4 { color: var(--accent2); margin: 0 0 10px; font-size: 16px; }
+  .component p { color: var(--text-dim); font-size: 14px; margin: 0; }
+  .component .tag { display: inline-block; background: rgba(88,166,255,0.1); color: var(--accent6); padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-top: 10px; }
+
+  @media (max-width: 900px) {
+    .nav { display: none; }
+    .main { margin-left: 0; padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-logo">
+    <h2>OpenClaw Architecture</h2>
+    <span>v2026.3.12 &middot; Complete Guide</span>
+  </div>
+  <div class="nav-section">Overview</div>
+  <a href="#what-is">What is OpenClaw?</a>
+  <a href="#at-a-glance">At a Glance (Numbers)</a>
+  <a href="#master-diagram">Master Architecture Diagram</a>
+  <div class="nav-section">Core Layers</div>
+  <a href="#layer1">1. CLI Entry Point</a>
+  <a href="#layer2">2. Gateway (Control Plane)</a>
+  <a href="#layer3">3. Agent Runtime (Pi)</a>
+  <a href="#layer4">4. Session Management</a>
+  <a href="#layer5">5. Model &amp; Auth Layer</a>
+  <a href="#layer6">6. Channel System</a>
+  <a href="#layer7">7. Tools &amp; Execution</a>
+  <a href="#layer8">8. Skills Platform</a>
+  <a href="#layer9">9. Automation (Cron/Webhooks)</a>
+  <a href="#layer10">10. Browser Control</a>
+  <a href="#layer11">11. Device Nodes</a>
+  <a href="#layer12">12. Web &amp; Canvas</a>
+  <a href="#layer13">13. Configuration System</a>
+  <a href="#layer14">14. Security Model</a>
+  <div class="nav-section">Flows</div>
+  <a href="#msg-flow">Message Flow (End-to-End)</a>
+  <a href="#agent-loop">Agent Loop (Detailed)</a>
+  <a href="#session-flow">Session Lifecycle</a>
+  <a href="#cron-flow">Cron Execution Flow</a>
+  <a href="#channel-routing">Channel Routing Flow</a>
+  <div class="nav-section">Reference</div>
+  <a href="#workspace-files">Workspace Files</a>
+  <a href="#extensions-list">All 44 Extensions</a>
+  <a href="#skills-list">All 52 Built-in Skills</a>
+  <a href="#module-map">625 Source Module Map</a>
+</nav>
+
+<!-- Main Content -->
+<div class="main">
+
+<!-- ============================================ -->
+<!-- SECTION: WHAT IS OPENCLAW -->
+<!-- ============================================ -->
+<h1 id="what-is">OpenClaw Architecture</h1>
+<p class="subtitle">A complete professor-level guide to every component, flow, and design decision in OpenClaw — the open-source personal AI assistant platform.</p>
+
+<div class="layman">
+  <p><strong>Imagine you have a really smart assistant (like Jarvis from Iron Man).</strong> But this assistant lives inside your computer, not a movie. OpenClaw is the entire infrastructure that makes this possible. It connects your assistant to WhatsApp, Telegram, Slack, and 20+ other apps, gives it the ability to control a web browser, take photos from your phone, schedule tasks, and remember your conversations. Think of it as the "nervous system" — the AI model (Claude, GPT) is the brain, but OpenClaw is everything else: the ears (messaging channels), the mouth (reply delivery), the hands (tools), the memory (sessions), and the clock (cron jobs).</p>
+</div>
+
+<div class="technical">
+  <p>OpenClaw is a <strong>local-first, multi-channel AI gateway</strong> built in TypeScript (Node >= 22). It provides a WebSocket-based control plane (the Gateway) that manages agent sessions, routes messages across 23+ messaging platforms via a plugin architecture, executes tools (shell, browser, canvas, devices), schedules automation (cron, webhooks, heartbeats), and coordinates companion device nodes (macOS, iOS, Android). The codebase compiles to 625 JavaScript modules, supports 44 extensions (channel/capability plugins), ships with 52 built-in skills, and exposes a typed Plugin SDK for custom integrations. It embeds the pi-mono agent runtime for LLM orchestration with tool streaming.</p>
+</div>
+
+<!-- Stats -->
+<div class="stats" id="at-a-glance">
+  <div class="stat"><div class="stat-num">625</div><div class="stat-label">Source Modules</div></div>
+  <div class="stat"><div class="stat-num">44</div><div class="stat-label">Extensions</div></div>
+  <div class="stat"><div class="stat-num">52</div><div class="stat-label">Built-in Skills</div></div>
+  <div class="stat"><div class="stat-num">23+</div><div class="stat-label">Messaging Channels</div></div>
+  <div class="stat"><div class="stat-num">14</div><div class="stat-label">Core Subsystems</div></div>
+  <div class="stat"><div class="stat-num">1</div><div class="stat-label">WebSocket Port</div></div>
+</div>
+
+<!-- ============================================ -->
+<!-- MASTER ARCHITECTURE DIAGRAM -->
+<!-- ============================================ -->
+<h2 id="master-diagram">Master Architecture Diagram</h2>
+<p>This is the complete OpenClaw system. Every box is a real subsystem; every arrow is a real data flow.</p>
+
+<div class="diagram-container">
+  <div class="diagram-title">OpenClaw System Architecture</div>
+  <svg viewBox="0 0 1100 820" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background grid -->
+    <defs>
+      <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1e2836" stroke-width="0.5"/></pattern>
+      <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
+      <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3fb950"/></marker>
+      <marker id="arrow-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#f0883e"/></marker>
+      <marker id="arrow-purple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d2a8ff"/></marker>
+      <filter id="glow"><feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#58a6ff" flood-opacity="0.3"/></filter>
+    </defs>
+    <rect width="1100" height="820" fill="#0d1117" rx="12"/>
+    <rect width="1100" height="820" fill="url(#grid)" rx="12"/>
+
+    <!-- USER LAYER (Top) -->
+    <text x="550" y="30" fill="#8b949e" font-size="11" text-anchor="middle" font-weight="600" letter-spacing="2">HUMAN / EXTERNAL WORLD</text>
+
+    <!-- Channel boxes -->
+    <rect x="30" y="45" width="90" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="75" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">WhatsApp</text>
+    <rect x="130" y="45" width="80" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="170" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">Telegram</text>
+    <rect x="220" y="45" width="65" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="252" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">Slack</text>
+    <rect x="295" y="45" width="70" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="330" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">Discord</text>
+    <rect x="375" y="45" width="65" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="407" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">Signal</text>
+    <rect x="450" y="45" width="75" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="487" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">iMessage</text>
+    <rect x="535" y="45" width="65" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="567" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">Teams</text>
+    <rect x="610" y="45" width="65" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="642" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">Matrix</text>
+    <rect x="685" y="45" width="65" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="717" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">IRC</text>
+    <rect x="760" y="45" width="70" height="35" rx="6" fill="#1a2332" stroke="#1f4068"/>
+    <text x="795" y="67" fill="#79c0ff" font-size="10" text-anchor="middle">+14 more</text>
+
+    <!-- Right side: External Inputs -->
+    <rect x="880" y="45" width="90" height="35" rx="6" fill="#2a1a1a" stroke="#f85149"/>
+    <text x="925" y="67" fill="#f85149" font-size="10" text-anchor="middle">Webhooks</text>
+    <rect x="980" y="45" width="90" height="35" rx="6" fill="#2a1a1a" stroke="#f85149"/>
+    <text x="1025" y="67" fill="#f85149" font-size="10" text-anchor="middle">CLI</text>
+
+    <!-- Arrows down from channels -->
+    <line x1="400" y1="80" x2="400" y2="110" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="925" y1="80" x2="550" y2="110" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow)"/>
+    <line x1="1025" y1="80" x2="600" y2="110" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow)"/>
+
+    <!-- ====== EXTENSION LAYER ====== -->
+    <rect x="100" y="110" width="700" height="45" rx="8" fill="#1a1a2e" stroke="#533483" stroke-width="1.5"/>
+    <text x="450" y="125" fill="#d2a8ff" font-size="11" text-anchor="middle" font-weight="600">EXTENSION LAYER (44 Plugins)</text>
+    <text x="450" y="142" fill="#8b6fbf" font-size="9" text-anchor="middle">plugin-registry.js &middot; extensionAPI.js &middot; Plugin SDK &middot; per-channel adapters</text>
+
+    <!-- Arrow down -->
+    <line x1="450" y1="155" x2="450" y2="180" stroke="#d2a8ff" stroke-width="2" marker-end="url(#arrow-purple)"/>
+
+    <!-- ====== GATEWAY (Big central box) ====== -->
+    <rect x="50" y="180" width="1000" height="260" rx="12" fill="#111820" stroke="#58a6ff" stroke-width="2" filter="url(#glow)"/>
+    <text x="550" y="205" fill="#58a6ff" font-size="14" text-anchor="middle" font-weight="700" letter-spacing="2">GATEWAY — WebSocket Control Plane (ws://127.0.0.1:18789)</text>
+
+    <!-- Inside Gateway: Sub-components -->
+    <!-- Row 1 -->
+    <rect x="80" y="220" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="152" y="240" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">Message Router</text>
+    <text x="152" y="255" fill="#8b949e" font-size="8" text-anchor="middle">channel-routing.js</text>
+    <text x="152" y="266" fill="#8b949e" font-size="8" text-anchor="middle">outbound.js, deliver-runtime.js</text>
+
+    <rect x="240" y="220" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="312" y="240" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">Session Manager</text>
+    <text x="312" y="255" fill="#8b949e" font-size="8" text-anchor="middle">session.js, session-key.js</text>
+    <text x="312" y="266" fill="#8b949e" font-size="8" text-anchor="middle">compact.runtime.js</text>
+
+    <rect x="400" y="220" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="472" y="240" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">Agent Orchestrator</text>
+    <text x="472" y="255" fill="#8b949e" font-size="8" text-anchor="middle">agent.js, agent-scope.js</text>
+    <text x="472" y="266" fill="#8b949e" font-size="8" text-anchor="middle">subagent-registry-runtime.js</text>
+
+    <rect x="560" y="220" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="632" y="240" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">Tool Executor</text>
+    <text x="632" y="255" fill="#8b949e" font-size="8" text-anchor="middle">exec.js, dangerous-tools.js</text>
+    <text x="632" y="266" fill="#8b949e" font-size="8" text-anchor="middle">pi-tools.before-tool-call.js</text>
+
+    <rect x="720" y="220" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="792" y="240" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">Config Engine</text>
+    <text x="792" y="255" fill="#8b949e" font-size="8" text-anchor="middle">config.js, config-guard.js</text>
+    <text x="792" y="266" fill="#8b949e" font-size="8" text-anchor="middle">env-overrides.js, secrets</text>
+
+    <rect x="880" y="220" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="952" y="240" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">RPC Server</text>
+    <text x="952" y="255" fill="#8b949e" font-size="8" text-anchor="middle">gateway-rpc.js, server.js</text>
+    <text x="952" y="266" fill="#8b949e" font-size="8" text-anchor="middle">Health, WebSocket protocol</text>
+
+    <!-- Row 2 -->
+    <rect x="80" y="290" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="152" y="310" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">Cron Scheduler</text>
+    <text x="152" y="325" fill="#8b949e" font-size="8" text-anchor="middle">cron-cli.js</text>
+    <text x="152" y="336" fill="#8b949e" font-size="8" text-anchor="middle">daemon-runtime.js</text>
+
+    <rect x="240" y="290" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="312" y="310" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">Webhook Ingress</text>
+    <text x="312" y="325" fill="#8b949e" font-size="8" text-anchor="middle">webhooks-cli.js</text>
+    <text x="312" y="336" fill="#8b949e" font-size="8" text-anchor="middle">/hooks/wake, /hooks/agent</text>
+
+    <rect x="400" y="290" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="472" y="310" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">Delivery Queue</text>
+    <text x="472" y="325" fill="#8b949e" font-size="8" text-anchor="middle">delivery-queue.js</text>
+    <text x="472" y="336" fill="#8b949e" font-size="8" text-anchor="middle">retry, at-least-once</text>
+
+    <rect x="560" y="290" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="632" y="310" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">Presence Engine</text>
+    <text x="632" y="325" fill="#8b949e" font-size="8" text-anchor="middle">presence tracking</text>
+    <text x="632" y="336" fill="#8b949e" font-size="8" text-anchor="middle">typing indicators</text>
+
+    <rect x="720" y="290" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="792" y="310" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">Media Pipeline</text>
+    <text x="792" y="325" fill="#8b949e" font-size="8" text-anchor="middle">image-runtime.js</text>
+    <text x="792" y="336" fill="#8b949e" font-size="8" text-anchor="middle">audio-preflight.js</text>
+
+    <rect x="880" y="290" width="145" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="952" y="310" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">Security Layer</text>
+    <text x="952" y="325" fill="#8b949e" font-size="8" text-anchor="middle">DM pairing, allowlists</text>
+    <text x="952" y="336" fill="#8b949e" font-size="8" text-anchor="middle">sandbox, auth tokens</text>
+
+    <!-- Row 3 inside gateway -->
+    <rect x="80" y="360" width="195" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="177" y="380" fill="#f85149" font-size="10" text-anchor="middle" font-weight="600">Model/Auth Manager</text>
+    <text x="177" y="395" fill="#8b949e" font-size="8" text-anchor="middle">models.js, auth-profiles.js, auth-choice.js</text>
+    <text x="177" y="406" fill="#8b949e" font-size="8" text-anchor="middle">OAuth, API keys, fallback, cooldown, rotation</text>
+
+    <rect x="290" y="360" width="195" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="387" y="380" fill="#f85149" font-size="10" text-anchor="middle" font-weight="600">Skill Scanner</text>
+    <text x="387" y="395" fill="#8b949e" font-size="8" text-anchor="middle">skill-scanner.js, skills.js</text>
+    <text x="387" y="406" fill="#8b949e" font-size="8" text-anchor="middle">bundled + managed + workspace skills</text>
+
+    <rect x="500" y="360" width="195" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="597" y="380" fill="#f85149" font-size="10" text-anchor="middle" font-weight="600">Queue Manager</text>
+    <text x="597" y="395" fill="#8b949e" font-size="8" text-anchor="middle">command queue, concurrency control</text>
+    <text x="597" y="406" fill="#8b949e" font-size="8" text-anchor="middle">steer/followup/collect/steer-backlog modes</text>
+
+    <rect x="710" y="360" width="195" height="55" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="807" y="380" fill="#f85149" font-size="10" text-anchor="middle" font-weight="600">Daemon/Service Mgr</text>
+    <text x="807" y="395" fill="#8b949e" font-size="8" text-anchor="middle">daemon.js, systemd.js, launchd</text>
+    <text x="807" y="406" fill="#8b949e" font-size="8" text-anchor="middle">install, start, stop, restart, status</text>
+
+    <!-- Arrows from gateway down -->
+    <line x1="300" y1="440" x2="300" y2="480" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="550" y1="440" x2="550" y2="480" stroke="#3fb950" stroke-width="2" marker-end="url(#arrow-green)"/>
+    <line x1="800" y1="440" x2="800" y2="480" stroke="#f0883e" stroke-width="2" marker-end="url(#arrow-orange)"/>
+
+    <!-- ====== PI AGENT RUNTIME ====== -->
+    <rect x="150" y="480" width="300" height="70" rx="10" fill="#1a1a2e" stroke="#d2a8ff" stroke-width="1.5"/>
+    <text x="300" y="505" fill="#d2a8ff" font-size="13" text-anchor="middle" font-weight="700">Pi Agent Runtime</text>
+    <text x="300" y="520" fill="#a080cf" font-size="9" text-anchor="middle">Embedded pi-mono &middot; RPC mode</text>
+    <text x="300" y="535" fill="#a080cf" font-size="9" text-anchor="middle">Tool streaming &middot; Block streaming &middot; Prompt assembly</text>
+
+    <!-- AI MODELS -->
+    <rect x="150" y="570" width="300" height="50" rx="8" fill="#2a1a1a" stroke="#f85149"/>
+    <text x="300" y="593" fill="#f85149" font-size="11" text-anchor="middle" font-weight="600">AI Models (Anthropic, OpenAI, Google, Ollama, vLLM, sglang ...)</text>
+    <text x="300" y="608" fill="#c04040" font-size="8" text-anchor="middle">Claude Opus/Sonnet &middot; GPT-5.2 &middot; Gemini &middot; Local models</text>
+    <line x1="300" y1="550" x2="300" y2="570" stroke="#f85149" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <!-- ====== TOOLS LAYER ====== -->
+    <rect x="500" y="480" width="200" height="70" rx="10" fill="#162e16" stroke="#3fb950" stroke-width="1.5"/>
+    <text x="600" y="500" fill="#3fb950" font-size="12" text-anchor="middle" font-weight="700">Tools</text>
+    <text x="600" y="516" fill="#2a8a3a" font-size="9" text-anchor="middle">exec (shell) &middot; browser (CDP)</text>
+    <text x="600" y="528" fill="#2a8a3a" font-size="9" text-anchor="middle">canvas &middot; fetch &middot; cron &middot; message</text>
+    <text x="600" y="540" fill="#2a8a3a" font-size="9" text-anchor="middle">sessions_* &middot; node.invoke</text>
+
+    <!-- ====== NODES (Devices) ====== -->
+    <rect x="730" y="480" width="200" height="70" rx="10" fill="#2a2a1a" stroke="#f0883e" stroke-width="1.5"/>
+    <text x="830" y="500" fill="#f0883e" font-size="12" text-anchor="middle" font-weight="700">Device Nodes</text>
+    <text x="830" y="516" fill="#b06828" font-size="9" text-anchor="middle">macOS &middot; iOS &middot; Android</text>
+    <text x="830" y="528" fill="#b06828" font-size="9" text-anchor="middle">camera &middot; screen &middot; location</text>
+    <text x="830" y="540" fill="#b06828" font-size="9" text-anchor="middle">system.run &middot; system.notify</text>
+
+    <!-- STORAGE LAYER -->
+    <text x="550" y="660" fill="#8b949e" font-size="11" text-anchor="middle" font-weight="600" letter-spacing="2">PERSISTENCE LAYER (~/.openclaw/)</text>
+
+    <rect x="50" y="675" width="140" height="45" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="120" y="695" fill="#79c0ff" font-size="10" text-anchor="middle">openclaw.json</text>
+    <text x="120" y="710" fill="#8b949e" font-size="8" text-anchor="middle">Master config</text>
+
+    <rect x="200" y="675" width="130" height="45" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="265" y="695" fill="#79c0ff" font-size="10" text-anchor="middle">agents/*/sessions/</text>
+    <text x="265" y="710" fill="#8b949e" font-size="8" text-anchor="middle">JSONL session files</text>
+
+    <rect x="340" y="675" width="130" height="45" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="405" y="695" fill="#79c0ff" font-size="10" text-anchor="middle">workspace-*/</text>
+    <text x="405" y="710" fill="#8b949e" font-size="8" text-anchor="middle">SOUL, AGENTS, skills</text>
+
+    <rect x="480" y="675" width="110" height="45" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="535" y="695" fill="#79c0ff" font-size="10" text-anchor="middle">cron/jobs.json</text>
+    <text x="535" y="710" fill="#8b949e" font-size="8" text-anchor="middle">Scheduled jobs</text>
+
+    <rect x="600" y="675" width="120" height="45" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="660" y="695" fill="#79c0ff" font-size="10" text-anchor="middle">delivery-queue/</text>
+    <text x="660" y="710" fill="#8b949e" font-size="8" text-anchor="middle">Pending messages</text>
+
+    <rect x="730" y="675" width="110" height="45" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="785" y="695" fill="#79c0ff" font-size="10" text-anchor="middle">credentials/</text>
+    <text x="785" y="710" fill="#8b949e" font-size="8" text-anchor="middle">OAuth tokens</text>
+
+    <rect x="850" y="675" width="110" height="45" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="905" y="695" fill="#79c0ff" font-size="10" text-anchor="middle">devices/</text>
+    <text x="905" y="710" fill="#8b949e" font-size="8" text-anchor="middle">Paired devices</text>
+
+    <!-- NPM PACKAGE -->
+    <text x="550" y="750" fill="#8b949e" font-size="11" text-anchor="middle" font-weight="600" letter-spacing="2">NPM PACKAGE (openclaw@2026.3.12)</text>
+    <rect x="100" y="765" width="150" height="35" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="175" y="787" fill="#ffa657" font-size="10" text-anchor="middle">dist/ (625 modules)</text>
+    <rect x="270" y="765" width="150" height="35" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="345" y="787" fill="#ffa657" font-size="10" text-anchor="middle">extensions/ (44)</text>
+    <rect x="440" y="765" width="150" height="35" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="515" y="787" fill="#ffa657" font-size="10" text-anchor="middle">skills/ (52)</text>
+    <rect x="610" y="765" width="150" height="35" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="685" y="787" fill="#ffa657" font-size="10" text-anchor="middle">docs/ (150+ pages)</text>
+    <rect x="780" y="765" width="150" height="35" rx="6" fill="#1c2333" stroke="#30363d"/>
+    <text x="855" y="787" fill="#ffa657" font-size="10" text-anchor="middle">plugin-sdk/</text>
+  </svg>
+</div>
+
+<!-- ============================================ -->
+<!-- LAYER 1: CLI ENTRY POINT -->
+<!-- ============================================ -->
+<h2 id="layer1">Layer 1: CLI Entry Point</h2>
+
+<div class="layman">
+  <p><strong>When you type <code>openclaw</code> in your terminal, this is where everything begins.</strong> It's like turning the ignition key in a car. The CLI checks your Node.js version, loads the compiled code, and routes your command (like <code>gateway</code>, <code>agent</code>, <code>channels</code>) to the right handler. It's the remote control for the entire system.</p>
+</div>
+
+<div class="technical">
+  <p>The entry point is <code>openclaw.mjs</code> — a thin ESM loader that verifies Node >= 22.12, enables V8 compile cache, installs a process warning filter, then dynamic-imports <code>dist/entry.js</code>. The entry module initializes the CLI program via <code>program.js</code> and <code>program-context.js</code>, which uses a command registry (<code>command-registry.js</code>) pattern. Each CLI subcommand (gateway, agent, channels, cron, models, skills, config, doctor, etc.) is a separate module under <code>register.*.js</code>:</p>
+  <ul>
+    <li><code>register.agent.js</code> — agent turns</li>
+    <li><code>register.message.js</code> — send/poll messages</li>
+    <li><code>register.status-health-sessions.js</code> — health/status/sessions</li>
+    <li><code>register.onboard.js</code> — wizard</li>
+    <li><code>register.configure.js</code> — interactive config</li>
+    <li><code>register.maintenance.js</code> — doctor, update, cleanup</li>
+    <li><code>register.setup.js</code> — initial setup</li>
+    <li><code>register.subclis.js</code> — gateway-cli, channels-cli, cron-cli, models-cli, skills-cli, browser-cli, nodes-cli, devices-cli, webhooks-cli, security-cli, etc.</li>
+  </ul>
+</div>
+
+<div class="diagram-container">
+  <div class="diagram-title">CLI Command Routing</div>
+  <svg viewBox="0 0 900 280" xmlns="http://www.w3.org/2000/svg">
+    <rect width="900" height="280" fill="#0d1117" rx="8"/>
+    <!-- Entry -->
+    <rect x="350" y="15" width="200" height="40" rx="8" fill="#2a1a1a" stroke="#f85149" stroke-width="2"/>
+    <text x="450" y="40" fill="#f85149" font-size="12" text-anchor="middle" font-weight="700">openclaw.mjs</text>
+    <line x1="450" y1="55" x2="450" y2="80" stroke="#f85149" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="350" y="80" width="200" height="35" rx="6" fill="#1c2333" stroke="#58a6ff"/>
+    <text x="450" y="102" fill="#58a6ff" font-size="11" text-anchor="middle">dist/entry.js → program.js</text>
+    <line x1="450" y1="115" x2="450" y2="140" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="300" y="140" width="300" height="30" rx="6" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="450" y="160" fill="#d2a8ff" font-size="11" text-anchor="middle">command-registry.js (route to handler)</text>
+
+    <!-- Fan out -->
+    <line x1="150" y1="170" x2="150" y2="200" stroke="#3fb950" stroke-width="1.5"/>
+    <line x1="270" y1="170" x2="270" y2="200" stroke="#3fb950" stroke-width="1.5"/>
+    <line x1="390" y1="170" x2="390" y2="200" stroke="#3fb950" stroke-width="1.5"/>
+    <line x1="510" y1="170" x2="510" y2="200" stroke="#3fb950" stroke-width="1.5"/>
+    <line x1="630" y1="170" x2="630" y2="200" stroke="#3fb950" stroke-width="1.5"/>
+    <line x1="750" y1="170" x2="750" y2="200" stroke="#3fb950" stroke-width="1.5"/>
+    <line x1="450" y1="170" x2="150" y2="195" stroke="#30363d" stroke-width="1"/>
+    <line x1="450" y1="170" x2="270" y2="195" stroke="#30363d" stroke-width="1"/>
+    <line x1="450" y1="170" x2="390" y2="195" stroke="#30363d" stroke-width="1"/>
+    <line x1="450" y1="170" x2="510" y2="195" stroke="#30363d" stroke-width="1"/>
+    <line x1="450" y1="170" x2="630" y2="195" stroke="#30363d" stroke-width="1"/>
+    <line x1="450" y1="170" x2="750" y2="195" stroke="#30363d" stroke-width="1"/>
+
+    <rect x="80" y="200" width="140" height="55" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="150" y="220" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">gateway</text>
+    <text x="150" y="235" fill="#8b949e" font-size="8" text-anchor="middle">start, stop, status</text>
+    <text x="150" y="246" fill="#8b949e" font-size="8" text-anchor="middle">install, restart, probe</text>
+
+    <rect x="230" y="200" width="100" height="55" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="280" y="220" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">agent</text>
+    <text x="280" y="235" fill="#8b949e" font-size="8" text-anchor="middle">Run agent turn</text>
+    <text x="280" y="246" fill="#8b949e" font-size="8" text-anchor="middle">--local, --deliver</text>
+
+    <rect x="340" y="200" width="100" height="55" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="390" y="220" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">channels</text>
+    <text x="390" y="235" fill="#8b949e" font-size="8" text-anchor="middle">list, login, add</text>
+    <text x="390" y="246" fill="#8b949e" font-size="8" text-anchor="middle">remove, status</text>
+
+    <rect x="450" y="200" width="100" height="55" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="500" y="220" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">cron</text>
+    <text x="500" y="235" fill="#8b949e" font-size="8" text-anchor="middle">add, list, rm</text>
+    <text x="500" y="246" fill="#8b949e" font-size="8" text-anchor="middle">run, enable, edit</text>
+
+    <rect x="560" y="200" width="120" height="55" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="620" y="220" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">models</text>
+    <text x="620" y="235" fill="#8b949e" font-size="8" text-anchor="middle">list, set, auth</text>
+    <text x="620" y="246" fill="#8b949e" font-size="8" text-anchor="middle">aliases, fallbacks</text>
+
+    <rect x="690" y="200" width="140" height="55" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="760" y="220" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">+ 15 more CLIs</text>
+    <text x="760" y="235" fill="#8b949e" font-size="8" text-anchor="middle">config, doctor, skills</text>
+    <text x="760" y="246" fill="#8b949e" font-size="8" text-anchor="middle">browser, nodes, onboard...</text>
+  </svg>
+</div>
+
+<!-- ============================================ -->
+<!-- LAYER 2: GATEWAY -->
+<!-- ============================================ -->
+<h2 id="layer2">Layer 2: The Gateway (WebSocket Control Plane)</h2>
+
+<div class="layman">
+  <p><strong>The Gateway is the airport control tower of OpenClaw.</strong> Every message from every app (WhatsApp, Telegram, Slack, etc.) lands at the Gateway. Every response goes out through the Gateway. Every tool the AI wants to use gets dispatched by the Gateway. Every scheduled task gets triggered by the Gateway. It runs as a background service on your computer, always on, always listening. It communicates via WebSockets (a persistent two-way connection, like a phone call that stays open) on a single port (default: 18789).</p>
+</div>
+
+<div class="technical">
+  <p>The Gateway is a <strong>single-process WebSocket + HTTP server</strong> bound to <code>127.0.0.1:18789</code> by default. Key architectural properties:</p>
+  <ul>
+    <li><strong>Single WS port</strong> — all clients (channels, CLI, macOS app, iOS/Android nodes, WebChat) connect to the same port. Protocol is typed JSON over WS.</li>
+    <li><strong>Hot reload</strong> — config changes to <code>openclaw.json</code> are detected and applied without restart. Mode can be <code>watch</code> (file watcher), <code>poll</code> (periodic), or <code>hybrid</code>.</li>
+    <li><strong>Auth</strong> — token-based (Bearer) or password-based. Tailscale identity headers supported when exposed via Tailscale Serve.</li>
+    <li><strong>Supervision</strong> — can install as launchd (macOS) or systemd (Linux) user service via <code>openclaw gateway install</code>.</li>
+    <li><strong>RPC protocol</strong> — all operations (sessions, config, cron, pairing) exposed as typed RPC methods over WebSocket.</li>
+    <li><strong>Invariants</strong>: Gateway is source of truth for session state; sessions never travel over the wire; tool exec happens on the Gateway host (device actions via node.invoke).</li>
+  </ul>
+</div>
+
+<!-- ============================================ -->
+<!-- LAYER 3: AGENT RUNTIME -->
+<!-- ============================================ -->
+<h2 id="layer3">Layer 3: Agent Runtime (Pi)</h2>
+
+<div class="layman">
+  <p><strong>The Agent Runtime is the thinking engine.</strong> When a message arrives, the Gateway wakes up the agent, which is like a brain that can read, think, and act. The "Pi" runtime is the engine that talks to the AI model (like Claude or GPT), sends it your message along with all the context (who you are, what tools are available, what you talked about before), receives the AI's response, and if the AI wants to do something (run a command, send a message, open a browser), the runtime executes those tool calls and feeds the results back to the AI until it's done thinking.</p>
+</div>
+
+<div class="technical">
+  <p>OpenClaw embeds <strong>pi-mono</strong> as its agent runtime — a lightweight, single-process LLM orchestration engine that runs in RPC mode within the Gateway process. Key components:</p>
+  <ul>
+    <li><strong>Workspace contract</strong> — each agent has a workspace directory containing identity files (SOUL.md, IDENTITY.md, USER.md, AGENTS.md, TOOLS.md, HEARTBEAT.md) that are injected into the system prompt.</li>
+    <li><strong>Prompt assembly</strong> — system prompt is constructed from: workspace files + matched skills + session history + model-specific formatting.</li>
+    <li><strong>Tool streaming</strong> — tool calls are streamed as they're generated (not batched), allowing parallel execution.</li>
+    <li><strong>Block streaming</strong> — response text is streamed in blocks for real-time delivery to channels with human-like pacing.</li>
+    <li><strong>Compaction</strong> — when context grows too large, automatic summarization compresses older turns while preserving key information.</li>
+    <li><strong>Sub-agents</strong> — can spawn isolated sub-agent sessions for parallel work, with configurable model, concurrency limits, and archive policies.</li>
+  </ul>
+</div>
+
+<div class="diagram-container">
+  <div class="diagram-title">Agent Loop (Detailed Execution Flow)</div>
+  <svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg" id="agent-loop">
+    <rect width="900" height="520" fill="#0d1117" rx="8"/>
+
+    <!-- Steps -->
+    <rect x="350" y="10" width="200" height="36" rx="8" fill="#1f4068" stroke="#58a6ff" stroke-width="2"/>
+    <text x="450" y="33" fill="#79c0ff" font-size="11" text-anchor="middle" font-weight="700">Message Arrives</text>
+    <line x1="450" y1="46" x2="450" y2="65" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="320" y="65" width="260" height="36" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="450" y="88" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">1. Queue &amp; Concurrency Check</text>
+    <line x1="450" y1="101" x2="450" y2="115" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <text x="610" y="85" fill="#8b949e" font-size="8">Modes: steer / followup / collect / steer-backlog</text>
+
+    <rect x="320" y="115" width="260" height="36" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="450" y="138" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">2. Session Resolution</text>
+    <line x1="450" y1="151" x2="450" y2="165" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <text x="610" y="135" fill="#8b949e" font-size="8">Key: per-channel-peer / main / per-peer / per-account-channel-peer</text>
+
+    <rect x="320" y="165" width="260" height="36" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="450" y="188" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">3. Prompt Assembly</text>
+    <line x1="450" y1="201" x2="450" y2="215" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <text x="610" y="178" fill="#8b949e" font-size="8">SOUL + IDENTITY + USER + AGENTS + TOOLS</text>
+    <text x="610" y="192" fill="#8b949e" font-size="8">+ matched Skills + session history</text>
+
+    <rect x="320" y="215" width="260" height="36" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="450" y="238" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">4. Hook: before-agent</text>
+    <line x1="450" y1="251" x2="450" y2="265" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <text x="610" y="238" fill="#8b949e" font-size="8">Pre-processing, context injection</text>
+
+    <rect x="320" y="265" width="260" height="36" rx="6" fill="#2a1a1a" stroke="#f85149" stroke-width="2"/>
+    <text x="450" y="288" fill="#f85149" font-size="11" text-anchor="middle" font-weight="700">5. LLM API Call (streaming)</text>
+    <line x1="450" y1="301" x2="450" y2="315" stroke="#f85149" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="615" y="288" fill="#8b949e" font-size="8">Claude / GPT / Gemini / Ollama / vLLM / sglang</text>
+
+    <rect x="320" y="315" width="260" height="36" rx="6" fill="#1c2333" stroke="#3fb950"/>
+    <text x="450" y="338" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">6. Stream Response + Tool Calls</text>
+    <text x="610" y="332" fill="#8b949e" font-size="8">Block streaming to channel (human pacing)</text>
+    <text x="610" y="346" fill="#8b949e" font-size="8">Tool calls streamed as generated</text>
+
+    <!-- Decision diamond -->
+    <polygon points="450,365 510,390 450,415 390,390" fill="#1a2332" stroke="#58a6ff" stroke-width="1.5"/>
+    <text x="450" y="394" fill="#58a6ff" font-size="9" text-anchor="middle">Tool calls?</text>
+
+    <!-- YES branch (left) -->
+    <line x1="390" y1="390" x2="200" y2="390" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+    <text x="290" y="383" fill="#3fb950" font-size="9">YES</text>
+
+    <rect x="60" y="370" width="140" height="40" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="130" y="390" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">7. Execute Tools</text>
+    <text x="130" y="402" fill="#8b949e" font-size="8" text-anchor="middle">exec, browser, fetch...</text>
+
+    <!-- Loop back up -->
+    <line x1="60" y1="390" x2="30" y2="390" stroke="#3fb950" stroke-width="1.5"/>
+    <line x1="30" y1="390" x2="30" y2="280" stroke="#3fb950" stroke-width="1.5"/>
+    <line x1="30" y1="280" x2="320" y2="280" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+    <text x="40" y="330" fill="#3fb950" font-size="8" transform="rotate(-90,40,330)">Feed results back</text>
+
+    <!-- NO branch (right) -->
+    <line x1="510" y1="390" x2="620" y2="390" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+    <text x="560" y="383" fill="#d2a8ff" font-size="9">NO</text>
+
+    <rect x="620" y="370" width="200" height="40" rx="6" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="720" y="390" fill="#d2a8ff" font-size="10" text-anchor="middle" font-weight="600">8. Final Response Ready</text>
+    <text x="720" y="402" fill="#8b949e" font-size="8" text-anchor="middle">Text + optional media</text>
+
+    <line x1="720" y1="410" x2="720" y2="430" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+    <rect x="620" y="430" width="200" height="36" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="720" y="453" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">9. Deliver to Channel</text>
+    <line x1="720" y1="466" x2="720" y2="483" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+    <rect x="620" y="483" width="200" height="30" rx="6" fill="#1c2333" stroke="#58a6ff"/>
+    <text x="720" y="503" fill="#58a6ff" font-size="10" text-anchor="middle" font-weight="600">10. Update Session JSONL</text>
+  </svg>
+</div>
+
+<!-- ============================================ -->
+<!-- LAYER 4: SESSION MANAGEMENT -->
+<!-- ============================================ -->
+<h2 id="layer4">Layer 4: Session Management</h2>
+
+<div class="layman">
+  <p><strong>Sessions are the agent's memory for each conversation.</strong> When you chat with the assistant on WhatsApp, it remembers what you said earlier because each conversation is saved as a "session." Different people get different sessions. Different channels (WhatsApp vs Telegram) get different sessions. Sessions can automatically reset daily (like wiping the whiteboard every morning) or after being idle too long. When a session gets too large, it gets "compacted" — the older parts are summarized to save space while keeping the important context.</p>
+</div>
+
+<div class="technical">
+  <p>Sessions are stored as <strong>JSONL files</strong> (append-only, one JSON object per line) in <code>agents/&lt;id&gt;/sessions/</code>. Key design decisions:</p>
+  <ul>
+    <li><strong>Session key derivation</strong> — configurable via <code>dmScope</code>: <code>main</code> (single global), <code>per-peer</code> (per user), <code>per-channel-peer</code> (per user per channel), <code>per-account-channel-peer</code> (most granular).</li>
+    <li><strong>Identity links</strong> — can merge sessions across channels for the same person (e.g., same user on Telegram + Discord).</li>
+    <li><strong>Gateway is source of truth</strong> — sessions never travel over the wire; the Gateway maintains all state.</li>
+    <li><strong>Reset policies</strong> — <code>daily</code> (at specific hour), <code>idle</code> (after N minutes), per-chat-type overrides (<code>resetByType</code>).</li>
+    <li><strong>Maintenance</strong> — <code>pruneAfter</code>, <code>maxEntries</code>, <code>rotateBytes</code> for automatic cleanup.</li>
+    <li><strong>Compaction</strong> — when context approaches model limits, older turns are summarized. Tool results get pruned (large outputs replaced with summaries). Soft pruning (trim tool results) → hard pruning (remove entire turns) hierarchy.</li>
+    <li><strong>Send policies</strong> — rules can deny outbound messages based on channel, chat type, or session key prefix.</li>
+    <li><strong>Queue modes</strong> — <code>steer</code> (new message replaces current), <code>followup</code> (appends to current run), <code>collect</code> (batches messages), <code>steer-backlog</code> (queues for sequential processing).</li>
+  </ul>
+</div>
+
+<div class="diagram-container">
+  <div class="diagram-title" id="session-flow">Session Lifecycle Flow</div>
+  <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+    <rect width="900" height="300" fill="#0d1117" rx="8"/>
+
+    <rect x="20" y="20" width="120" height="36" rx="6" fill="#1f4068" stroke="#58a6ff"/>
+    <text x="80" y="43" fill="#79c0ff" font-size="10" text-anchor="middle" font-weight="600">Message In</text>
+    <line x1="140" y1="38" x2="175" y2="38" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <rect x="175" y="20" width="135" height="36" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="242" y="43" fill="#ffa657" font-size="10" text-anchor="middle">Derive Session Key</text>
+    <line x1="310" y1="38" x2="345" y2="38" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+    <polygon points="415,18 470,38 415,58 360,38" fill="#1a2332" stroke="#58a6ff"/>
+    <text x="415" y="42" fill="#58a6ff" font-size="8" text-anchor="middle">Exists?</text>
+
+    <!-- YES -->
+    <line x1="470" y1="38" x2="530" y2="38" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+    <text x="497" y="30" fill="#3fb950" font-size="8">YES</text>
+    <rect x="530" y="20" width="120" height="36" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="590" y="38" fill="#3fb950" font-size="10" text-anchor="middle">Resume Session</text>
+    <text x="590" y="50" fill="#8b949e" font-size="7" text-anchor="middle">Load JSONL history</text>
+
+    <!-- NO -->
+    <line x1="415" y1="58" x2="415" y2="80" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+    <text x="430" y="73" fill="#d2a8ff" font-size="8">NO</text>
+    <rect x="355" y="80" width="120" height="36" rx="6" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="415" y="98" fill="#d2a8ff" font-size="10" text-anchor="middle">Create New</text>
+    <text x="415" y="110" fill="#8b949e" font-size="7" text-anchor="middle">Fresh JSONL file</text>
+
+    <!-- Both converge -->
+    <line x1="590" y1="56" x2="590" y2="140" stroke="#58a6ff" stroke-width="1.5"/>
+    <line x1="415" y1="116" x2="415" y2="140" stroke="#58a6ff" stroke-width="1.5"/>
+    <line x1="415" y1="140" x2="590" y2="140" stroke="#58a6ff" stroke-width="1"/>
+    <line x1="503" y1="140" x2="503" y2="160" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <rect x="420" y="160" width="165" height="36" rx="6" fill="#2a1a1a" stroke="#f85149"/>
+    <text x="503" y="183" fill="#f85149" font-size="10" text-anchor="middle" font-weight="600">Agent Processes Turn</text>
+    <line x1="503" y1="196" x2="503" y2="215" stroke="#f85149" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <rect x="420" y="215" width="165" height="30" rx="6" fill="#1c2333" stroke="#3fb950"/>
+    <text x="503" y="235" fill="#3fb950" font-size="10" text-anchor="middle">Append to JSONL</text>
+    <line x1="503" y1="245" x2="503" y2="260" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <!-- Check size -->
+    <polygon points="503,260 553,278 503,296 453,278" fill="#1a2332" stroke="#ffa657"/>
+    <text x="503" y="282" fill="#ffa657" font-size="7" text-anchor="middle">Too large?</text>
+    <line x1="553" y1="278" x2="630" y2="278" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <text x="585" y="270" fill="#ffa657" font-size="8">YES</text>
+    <rect x="630" y="260" width="120" height="36" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="690" y="278" fill="#ffa657" font-size="10" text-anchor="middle">Compact</text>
+    <text x="690" y="290" fill="#8b949e" font-size="7" text-anchor="middle">Summarize older turns</text>
+
+    <!-- Reset checks (right side) -->
+    <rect x="700" y="80" width="170" height="100" rx="8" fill="#1c2333" stroke="#30363d"/>
+    <text x="785" y="100" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">Auto-Reset Triggers</text>
+    <text x="785" y="118" fill="#8b949e" font-size="9" text-anchor="middle">Daily at hour (e.g., 4 AM)</text>
+    <text x="785" y="133" fill="#8b949e" font-size="9" text-anchor="middle">Idle timeout (e.g., 120 min)</text>
+    <text x="785" y="148" fill="#8b949e" font-size="9" text-anchor="middle">Manual: /new or /reset</text>
+    <text x="785" y="163" fill="#8b949e" font-size="9" text-anchor="middle">Per-type overrides</text>
+  </svg>
+</div>
+
+<!-- ============================================ -->
+<!-- LAYER 5: MODEL & AUTH -->
+<!-- ============================================ -->
+<h2 id="layer5">Layer 5: Model &amp; Auth Layer</h2>
+
+<div class="layman">
+  <p><strong>OpenClaw isn't locked to one AI brain — it can use many.</strong> You can use Claude (Anthropic), GPT (OpenAI), Gemini (Google), or even run local models on your own hardware. The auth layer manages API keys, OAuth tokens, and subscription credentials. If one provider goes down or you hit a rate limit, it automatically falls back to the next one. Think of it like having multiple phone plans — if one network drops, you seamlessly switch to another.</p>
+</div>
+
+<div class="technical">
+  <ul>
+    <li><strong>Auth profiles</strong> — stored in <code>credentials/auth-profiles.json</code>. Each profile has: provider, mode (token/oauth), credentials, cooldown state. Profile IDs like <code>anthropic:manual</code>, <code>openai:copilot-proxy</code>.</li>
+    <li><strong>Rotation</strong> — profiles for the same provider are tried in order. On failure (401/403/429), the profile enters cooldown and next is tried.</li>
+    <li><strong>Session stickiness</strong> — once a session starts with a model, it stays on that model unless explicitly switched (prevents context format mismatch).</li>
+    <li><strong>Model fallbacks</strong> — if the primary model fails, fallback models are tried: <code>agents.defaults.model.fallbacks: ["openai/gpt-5.2"]</code>.</li>
+    <li><strong>Billing disable</strong> — if billing is suspended, the profile is marked disabled and skipped.</li>
+    <li><strong>Model aliases</strong> — shortcuts like <code>opus</code> → <code>anthropic/claude-opus-4-6</code>.</li>
+    <li><strong>Supported providers</strong>: Anthropic (direct + OAuth), OpenAI (direct + Copilot proxy + Codex OAuth), Google (Gemini CLI auth), Ollama, vLLM, sglang, MiniMax, Qwen, and any OpenAI-compatible endpoint.</li>
+  </ul>
+</div>
+
+<!-- ============================================ -->
+<!-- LAYER 6: CHANNEL SYSTEM -->
+<!-- ============================================ -->
+<h2 id="layer6">Layer 6: Channel System (23+ Messaging Platforms)</h2>
+
+<div class="layman">
+  <p><strong>Channels are the ears and mouth of OpenClaw.</strong> Each channel is a persistent connection to a messaging platform. When someone sends you a WhatsApp message, the WhatsApp channel plugin receives it, translates it into a standard format, and hands it to the Gateway. When the AI responds, the reply goes back through the channel plugin and gets translated into WhatsApp format. Each channel handles its own quirks — WhatsApp uses QR code login, Telegram uses bot tokens, Discord uses bot tokens + slash commands, Slack uses Bolt SDK, etc.</p>
+</div>
+
+<div class="technical">
+  <p>The channel system is implemented as an <strong>extension/plugin architecture</strong>:</p>
+  <ul>
+    <li><strong>Plugin SDK</strong> — each channel imports from <code>openclaw/plugin-sdk</code> (or channel-specific SDKs like <code>openclaw/plugin-sdk/whatsapp</code>).</li>
+    <li><strong>Extension lifecycle</strong> — loaded by <code>plugin-registry.js</code>, initialized with config, maintains persistent connections.</li>
+    <li><strong>Message normalization</strong> — all inbound messages are converted to a standard envelope: sender, channel, chatType (dm/group), text, media, metadata.</li>
+    <li><strong>Outbound delivery</strong> — <code>outbound.js</code> → <code>deliver-runtime.js</code> → channel-specific <code>deps-send-*.runtime.js</code>.</li>
+    <li><strong>Delivery queue</strong> — failed sends are persisted to <code>delivery-queue/*.json</code> for retry.</li>
+    <li><strong>Streaming/chunking</strong> — long responses are chunked per channel limits. Preview streaming (edit-in-place) on Telegram/Discord/Slack. Human-like pacing.</li>
+    <li><strong>Access control per channel</strong>: <code>dmPolicy</code> (pairing/allowlist/open/disabled), <code>allowFrom</code> lists, <code>groupPolicy</code>, <code>requireMention</code> for groups.</li>
+    <li><strong>Acknowledgment reactions</strong> — agent can react to messages (thinking/done emojis) on supported channels.</li>
+  </ul>
+</div>
+
+<div class="diagram-container">
+  <div class="diagram-title" id="channel-routing">Channel Routing Flow</div>
+  <svg viewBox="0 0 900 310" xmlns="http://www.w3.org/2000/svg">
+    <rect width="900" height="310" fill="#0d1117" rx="8"/>
+
+    <!-- Inbound -->
+    <rect x="20" y="20" width="100" height="30" rx="5" fill="#1f4068" stroke="#79c0ff"/>
+    <text x="70" y="40" fill="#79c0ff" font-size="9" text-anchor="middle">WhatsApp msg</text>
+    <line x1="120" y1="35" x2="160" y2="35" stroke="#79c0ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <rect x="160" y="15" width="140" height="40" rx="6" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="230" y="33" fill="#d2a8ff" font-size="9" text-anchor="middle" font-weight="600">Extension Plugin</text>
+    <text x="230" y="47" fill="#8b949e" font-size="7" text-anchor="middle">Normalize to standard envelope</text>
+    <line x1="300" y1="35" x2="340" y2="35" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+    <rect x="340" y="15" width="140" height="40" rx="6" fill="#1c2333" stroke="#f85149"/>
+    <text x="410" y="33" fill="#f85149" font-size="9" text-anchor="middle" font-weight="600">Access Control</text>
+    <text x="410" y="47" fill="#8b949e" font-size="7" text-anchor="middle">dmPolicy + allowFrom check</text>
+    <line x1="480" y1="35" x2="520" y2="35" stroke="#f85149" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <polygon points="590,15 640,35 590,55 540,35" fill="#1a2332" stroke="#3fb950"/>
+    <text x="590" y="39" fill="#3fb950" font-size="7" text-anchor="middle">Allowed?</text>
+
+    <line x1="640" y1="35" x2="690" y2="35" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+    <text x="663" y="28" fill="#3fb950" font-size="7">YES</text>
+
+    <line x1="590" y1="55" x2="590" y2="75" stroke="#f85149" stroke-width="1.5"/>
+    <text x="605" y="68" fill="#f85149" font-size="7">NO</text>
+    <rect x="530" y="75" width="120" height="25" rx="4" fill="#2a1a1a" stroke="#f85149"/>
+    <text x="590" y="92" fill="#f85149" font-size="8" text-anchor="middle">Reject / Pairing code</text>
+
+    <rect x="690" y="15" width="140" height="40" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="760" y="33" fill="#ffa657" font-size="9" text-anchor="middle" font-weight="600">Agent Routing</text>
+    <text x="760" y="47" fill="#8b949e" font-size="7" text-anchor="middle">Binding rules → agent ID</text>
+
+    <!-- Binding rules detail -->
+    <rect x="20" y="120" width="860" height="80" rx="8" fill="#1c2333" stroke="#30363d"/>
+    <text x="450" y="140" fill="#ffa657" font-size="11" text-anchor="middle" font-weight="600">Binding Rules (which agent handles which channel)</text>
+    <text x="450" y="160" fill="#8b949e" font-size="9" text-anchor="middle">bindings: [</text>
+    <text x="450" y="175" fill="#79c0ff" font-size="9" text-anchor="middle">{ agentId: "jarvis", match: { channel: "whatsapp" } },  { agentId: "work", match: { channel: "slack", accountId: "work" } }</text>
+    <text x="450" y="190" fill="#8b949e" font-size="9" text-anchor="middle">]  // If no binding matches → default agent</text>
+
+    <!-- Outbound flow -->
+    <text x="450" y="225" fill="#8b949e" font-size="11" text-anchor="middle" font-weight="600" letter-spacing="1">OUTBOUND DELIVERY FLOW</text>
+
+    <rect x="20" y="240" width="130" height="40" rx="6" fill="#1c2333" stroke="#3fb950"/>
+    <text x="85" y="258" fill="#3fb950" font-size="9" text-anchor="middle" font-weight="600">Agent Response</text>
+    <text x="85" y="272" fill="#8b949e" font-size="7" text-anchor="middle">Text + media blocks</text>
+    <line x1="150" y1="260" x2="185" y2="260" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <rect x="185" y="240" width="120" height="40" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="245" y="258" fill="#ffa657" font-size="9" text-anchor="middle" font-weight="600">Chunking</text>
+    <text x="245" y="272" fill="#8b949e" font-size="7" text-anchor="middle">Split by channel limits</text>
+    <line x1="305" y1="260" x2="340" y2="260" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+    <rect x="340" y="240" width="130" height="40" rx="6" fill="#1c2333" stroke="#d2a8ff"/>
+    <text x="405" y="258" fill="#d2a8ff" font-size="9" text-anchor="middle" font-weight="600">Delivery Queue</text>
+    <text x="405" y="272" fill="#8b949e" font-size="7" text-anchor="middle">Persist for retry</text>
+    <line x1="470" y1="260" x2="505" y2="260" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+    <rect x="505" y="240" width="140" height="40" rx="6" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="575" y="258" fill="#d2a8ff" font-size="9" text-anchor="middle" font-weight="600">Channel Plugin</text>
+    <text x="575" y="272" fill="#8b949e" font-size="7" text-anchor="middle">Format for platform</text>
+    <line x1="645" y1="260" x2="680" y2="260" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <rect x="680" y="240" width="140" height="40" rx="6" fill="#1f4068" stroke="#79c0ff"/>
+    <text x="750" y="258" fill="#79c0ff" font-size="9" text-anchor="middle" font-weight="600">Platform API</text>
+    <text x="750" y="272" fill="#8b949e" font-size="7" text-anchor="middle">WhatsApp/TG/Slack/...</text>
+  </svg>
+</div>
+
+<!-- ============================================ -->
+<!-- LAYERS 7-14 (remaining) -->
+<!-- ============================================ -->
+
+<h2 id="layer7">Layer 7: Tools &amp; Execution</h2>
+
+<div class="layman">
+  <p><strong>Tools are the agent's hands.</strong> When the AI decides it needs to do something — run a terminal command, read a file, open a website, send a message, create a cron job — it issues a "tool call." The Gateway intercepts this, executes the action on your computer, and returns the result to the AI. There's a safety layer: some tools are marked "dangerous" and require extra confirmation or are restricted in sandboxed sessions.</p>
+</div>
+
+<div class="components">
+  <div class="component">
+    <h4>exec (Shell Execution)</h4>
+    <p>Runs shell commands on the Gateway host. Configurable allowlist of safe binaries. Sandboxable via Docker for non-main sessions.</p>
+    <span class="tag">exec.js</span>
+  </div>
+  <div class="component">
+    <h4>message (Send Messages)</h4>
+    <p>Send messages to any connected channel. Supports text, media, polls, reactions. Used by both agent and cron delivery.</p>
+    <span class="tag">outbound.js</span>
+  </div>
+  <div class="component">
+    <h4>browser (Web Control)</h4>
+    <p>Full Chrome DevTools Protocol control. Navigate, click, type, screenshot, fill forms, manage cookies. Isolated profile.</p>
+    <span class="tag">browser-cli.js</span>
+  </div>
+  <div class="component">
+    <h4>fetch (Web Requests)</h4>
+    <p>HTTP requests with SSRF protection. Configurable allow/deny for private networks.</p>
+    <span class="tag">fetch.js</span>
+  </div>
+  <div class="component">
+    <h4>cron (Scheduling)</h4>
+    <p>Create, edit, delete scheduled jobs. Supports cron expressions, one-shot timers, relative time offsets.</p>
+    <span class="tag">cron-cli.js</span>
+  </div>
+  <div class="component">
+    <h4>sessions_* (Agent-to-Agent)</h4>
+    <p>List active sessions, read history, send messages between sessions. Enables multi-agent coordination.</p>
+    <span class="tag">sessions.js</span>
+  </div>
+  <div class="component">
+    <h4>node.invoke (Device Control)</h4>
+    <p>Execute commands on paired devices: camera, screen record, location, notifications, system commands.</p>
+    <span class="tag">node-commands.js</span>
+  </div>
+  <div class="component">
+    <h4>canvas (Visual Workspace)</h4>
+    <p>Push HTML/content to a live Canvas surface on macOS/iOS. A2UI (Agent-to-UI) protocol for rich interfaces.</p>
+    <span class="tag">canvas</span>
+  </div>
+</div>
+
+<h2 id="layer8">Layer 8: Skills Platform</h2>
+
+<div class="layman">
+  <p><strong>Skills are instruction manuals that teach the agent new abilities.</strong> Each skill is a folder with a SKILL.md file that says "here's how to use this tool." For example, the "weather" skill teaches the agent how to check the weather. The "github" skill teaches it to use the GitHub CLI. Skills can include scripts, templates, and reference docs. There are three levels: built-in (shipped with OpenClaw), managed (installed from ClawHub marketplace), and workspace (custom, per-agent).</p>
+</div>
+
+<div class="technical">
+  <ul>
+    <li><strong>Skill format</strong> — AgentSkills-compatible folder with <code>SKILL.md</code> (frontmatter: name, description, user-invocable, gating). Optional: <code>scripts/</code>, <code>references/</code>, <code>assets/</code>.</li>
+    <li><strong>Three locations</strong>: Bundled (<code>$(npm root -g)/openclaw/skills/</code>), Managed (ClawHub-installed), Workspace (<code>workspace-*/skills/</code>).</li>
+    <li><strong>Precedence</strong>: workspace > managed > bundled (allows overriding built-in skills).</li>
+    <li><strong>Gating</strong> — skills declare requirements (binaries, env vars, config keys, platform). Only eligible skills are loaded.</li>
+    <li><strong>Config injection</strong> — skills can receive per-skill config and env vars from <code>skills.entries.&lt;name&gt;</code> in openclaw.json.</li>
+    <li><strong>Session snapshot</strong> — <code>&lt;skill_dir&gt;</code> placeholder in SKILL.md expands to the actual skill path at runtime.</li>
+    <li><strong>Skills watcher</strong> — file changes to skills directories trigger hot-reload with configurable debounce.</li>
+    <li><strong>Token impact</strong> — each loaded skill adds to the system prompt size. OpenClaw tracks and reports skill token usage.</li>
+  </ul>
+</div>
+
+<h2 id="layer9">Layer 9: Automation (Cron, Webhooks, Heartbeats)</h2>
+
+<div class="layman">
+  <p><strong>Automation is the alarm clock and doorbell of OpenClaw.</strong> Cron jobs wake the agent at scheduled times (like a 6 AM morning briefing every day). Webhooks let external services ring the doorbell (like Gmail sending a notification when you get an email). Heartbeats are gentle periodic check-ins (the agent wakes up every 30 minutes to check if anything needs attention). Together, these make the agent proactive, not just reactive.</p>
+</div>
+
+<div class="diagram-container">
+  <div class="diagram-title" id="cron-flow">Cron Job Execution Flow</div>
+  <svg viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg">
+    <rect width="900" height="220" fill="#0d1117" rx="8"/>
+
+    <rect x="20" y="20" width="120" height="40" rx="6" fill="#2a1a1a" stroke="#f85149"/>
+    <text x="80" y="38" fill="#f85149" font-size="10" text-anchor="middle" font-weight="600">cron/jobs.json</text>
+    <text x="80" y="52" fill="#8b949e" font-size="7" text-anchor="middle">Schedule definitions</text>
+    <line x1="140" y1="40" x2="175" y2="40" stroke="#f85149" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <rect x="175" y="20" width="130" height="40" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="240" y="38" fill="#ffa657" font-size="10" text-anchor="middle" font-weight="600">Cron Evaluator</text>
+    <text x="240" y="52" fill="#8b949e" font-size="7" text-anchor="middle">Check: time match? enabled?</text>
+    <line x1="305" y1="40" x2="340" y2="40" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+    <polygon points="395,20 435,40 395,60 355,40" fill="#1a2332" stroke="#3fb950"/>
+    <text x="395" y="44" fill="#3fb950" font-size="7" text-anchor="middle">Fire?</text>
+    <line x1="435" y1="40" x2="470" y2="40" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <rect x="470" y="20" width="130" height="40" rx="6" fill="#1c2333" stroke="#3fb950"/>
+    <text x="535" y="38" fill="#3fb950" font-size="10" text-anchor="middle" font-weight="600">Create Session</text>
+    <text x="535" y="52" fill="#8b949e" font-size="7" text-anchor="middle">isolated or main</text>
+    <line x1="600" y1="40" x2="635" y2="40" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <rect x="635" y="20" width="120" height="40" rx="6" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="695" y="38" fill="#d2a8ff" font-size="10" text-anchor="middle" font-weight="600">Agent Turn</text>
+    <text x="695" y="52" fill="#8b949e" font-size="7" text-anchor="middle">Execute payload message</text>
+    <line x1="755" y1="40" x2="790" y2="40" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+    <rect x="790" y="20" width="90" height="40" rx="6" fill="#1f4068" stroke="#79c0ff"/>
+    <text x="835" y="38" fill="#79c0ff" font-size="10" text-anchor="middle" font-weight="600">Deliver</text>
+    <text x="835" y="52" fill="#8b949e" font-size="7" text-anchor="middle">→ channel</text>
+
+    <!-- Webhooks row -->
+    <text x="450" y="90" fill="#8b949e" font-size="10" text-anchor="middle" font-weight="600" letter-spacing="1">THREE AUTOMATION TYPES COMPARED</text>
+
+    <rect x="20" y="110" width="270" height="90" rx="8" fill="#162e16" stroke="#3fb950"/>
+    <text x="155" y="132" fill="#3fb950" font-size="11" text-anchor="middle" font-weight="700">Cron Jobs</text>
+    <text x="155" y="148" fill="#8b949e" font-size="9" text-anchor="middle">Time-based triggers</text>
+    <text x="155" y="163" fill="#8b949e" font-size="9" text-anchor="middle">"Every day at 6 AM" / "In 20 minutes"</text>
+    <text x="155" y="178" fill="#8b949e" font-size="9" text-anchor="middle">Best for: scheduled tasks, reminders</text>
+    <text x="155" y="193" fill="#8b949e" font-size="9" text-anchor="middle">Storage: cron/jobs.json</text>
+
+    <rect x="310" y="110" width="270" height="90" rx="8" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="445" y="132" fill="#d2a8ff" font-size="11" text-anchor="middle" font-weight="700">Webhooks</text>
+    <text x="445" y="148" fill="#8b949e" font-size="9" text-anchor="middle">External HTTP triggers</text>
+    <text x="445" y="163" fill="#8b949e" font-size="9" text-anchor="middle">POST /hooks/wake or /hooks/agent</text>
+    <text x="445" y="178" fill="#8b949e" font-size="9" text-anchor="middle">Best for: Gmail, CI/CD, external events</text>
+    <text x="445" y="193" fill="#8b949e" font-size="9" text-anchor="middle">Auth: Bearer token</text>
+
+    <rect x="600" y="110" width="270" height="90" rx="8" fill="#2a2a1a" stroke="#f0883e"/>
+    <text x="735" y="132" fill="#f0883e" font-size="11" text-anchor="middle" font-weight="700">Heartbeats</text>
+    <text x="735" y="148" fill="#8b949e" font-size="9" text-anchor="middle">Periodic check-ins</text>
+    <text x="735" y="163" fill="#8b949e" font-size="9" text-anchor="middle">Agent wakes every N min (e.g., 30m)</text>
+    <text x="735" y="178" fill="#8b949e" font-size="9" text-anchor="middle">Best for: monitoring, status checks</text>
+    <text x="735" y="193" fill="#8b949e" font-size="9" text-anchor="middle">Config: HEARTBEAT.md + agents.defaults</text>
+  </svg>
+</div>
+
+<h2 id="layer10">Layer 10: Browser Control</h2>
+
+<div class="layman">
+  <p><strong>OpenClaw gives the AI its own web browser.</strong> It's not your browser — it's a separate, isolated Chrome profile (with a distinctive orange border so you know which is the agent's). The agent can navigate to websites, fill out forms, click buttons, take screenshots, download files, and interact with web apps. This is how the agent can do things like check a website, fill out a form for you, or take screenshots of a dashboard. It uses Chrome DevTools Protocol (CDP) — the same technology Chrome's developer tools use.</p>
+</div>
+
+<div class="technical">
+  <ul>
+    <li><strong>Isolation</strong> — dedicated browser profile (<code>openclaw</code>) with separate cookies, history, extensions. CDP port 18800 by default.</li>
+    <li><strong>Multi-profile</strong> — can configure multiple profiles (<code>openclaw</code>, <code>work</code>, <code>remote</code>) with different CDP ports and colors.</li>
+    <li><strong>Browsers supported</strong> — Chrome, Brave, Edge, Chromium. Configurable <code>executablePath</code>.</li>
+    <li><strong>Snapshot system</strong> — AI-optimized DOM snapshots with interactive labels and ref IDs for point-and-click actions.</li>
+    <li><strong>Remote browsers</strong> — can connect to remote CDP endpoints (Browserless, Browserbase, or any <code>cdpUrl</code>).</li>
+    <li><strong>Sandbox sessions</strong> — browser access can be denied for non-main sessions (security).</li>
+    <li><strong>SSRF policy</strong> — configurable private network access (<code>dangerouslyAllowPrivateNetwork</code>).</li>
+  </ul>
+</div>
+
+<h2 id="layer11">Layer 11: Device Nodes (Companion Apps)</h2>
+
+<div class="layman">
+  <p><strong>Nodes are physical devices that extend the agent's reach into the real world.</strong> Your iPhone can be a "node" — the agent can ask it to take a photo, record your screen, get your GPS location, or send a notification. Your Mac can also be a node for running commands or accessing the webcam. Devices connect to the Gateway over WebSocket and authenticate via a pairing process (like Bluetooth pairing — you approve the device once).</p>
+</div>
+
+<div class="components">
+  <div class="component">
+    <h4>macOS Node</h4>
+    <p>system.run, system.notify, canvas, camera, screen recording. Menu bar app with Voice Wake + Push-to-Talk.</p>
+    <span class="tag">Native Swift app</span>
+  </div>
+  <div class="component">
+    <h4>iOS Node</h4>
+    <p>Canvas, Voice Wake, camera snap/clip, screen recording, Bonjour discovery, device pairing.</p>
+    <span class="tag">Native Swift app</span>
+  </div>
+  <div class="component">
+    <h4>Android Node</h4>
+    <p>Chat, voice, canvas, camera, screen recording, notifications, location, SMS, photos, contacts, calendar, app commands.</p>
+    <span class="tag">Native Kotlin app</span>
+  </div>
+  <div class="component">
+    <h4>Headless Node</h4>
+    <p>Node host without GUI — for servers or Raspberry Pi. Exposes system.run + system.notify.</p>
+    <span class="tag">CLI-based</span>
+  </div>
+</div>
+
+<h2 id="layer12">Layer 12: Web UI &amp; Canvas</h2>
+
+<div class="layman">
+  <p><strong>OpenClaw has a built-in web interface served directly from the Gateway.</strong> The Control UI is a dashboard where you can monitor sessions, check health, manage config, and see what the agent is doing. WebChat is a chat interface in your browser. Canvas is a special visual workspace where the agent can push interactive HTML content — like dashboards, data visualizations, or custom interfaces. Think of Canvas as a screen that the AI can draw on in real-time.</p>
+</div>
+
+<h2 id="layer13">Layer 13: Configuration System</h2>
+
+<div class="layman">
+  <p><strong>Everything in OpenClaw is controlled by a single config file: <code>~/.openclaw/openclaw.json</code>.</strong> It's like the control panel of a spaceship — one place to configure which AI model to use, which messaging apps to connect, who's allowed to talk to the agent, what scheduled tasks to run, and more. The config supports environment variable substitution (so secrets aren't hardcoded), hot-reload (changes take effect immediately), and strict validation (typos are caught before they cause problems).</p>
+</div>
+
+<div class="technical">
+  <ul>
+    <li><strong>Format</strong> — JSON5 (allows comments, trailing commas).</li>
+    <li><strong>Environment variables</strong> — <code>${VAR_NAME}</code> syntax, loaded from <code>~/.openclaw/.env</code>.</li>
+    <li><strong>Hot reload modes</strong> — <code>watch</code> (inotify/FSEvents), <code>poll</code> (periodic), <code>hybrid</code> (watch + poll fallback).</li>
+    <li><strong>Strict validation</strong> — TypeBox schemas validate every key. Unknown keys cause startup warnings.</li>
+    <li><strong>Config RPC</strong> — <code>config.get</code>, <code>config.patch</code> methods over WebSocket for programmatic updates.</li>
+    <li><strong>Config splitting</strong> — can split config across multiple files with includes.</li>
+    <li><strong>Secret refs</strong> — reference secrets from files: <code>${file:~/.openclaw/credentials/token}</code>.</li>
+  </ul>
+</div>
+
+<h2 id="layer14">Layer 14: Security Model</h2>
+
+<div class="layman">
+  <p><strong>OpenClaw takes security seriously because it has access to your messages, files, and devices.</strong> By default, unknown people can't talk to your agent (they get a pairing code instead). The Gateway only listens on localhost (can't be reached from the internet). API keys are stored in protected files. In group chats, the agent can be sandboxed (runs commands inside Docker containers). There's a "dangerous tools" classification system — some tools need extra approval. And there are strict rules about what the agent can and can't do in different contexts.</p>
+</div>
+
+<div class="technical">
+  <ul>
+    <li><strong>DM pairing</strong> — default for unknown senders. Pairing code must be approved via CLI before the bot responds.</li>
+    <li><strong>Loopback binding</strong> — Gateway binds to <code>127.0.0.1</code> by default. Remote access only via Tailscale Serve/Funnel or SSH tunnels.</li>
+    <li><strong>Sandboxing</strong> — non-main sessions can run inside per-session Docker containers. Tool allowlist/denylist configurable.</li>
+    <li><strong>Tool classification</strong> — <code>dangerous-tools.js</code> classifies tools by risk level. Browser, canvas, nodes, cron, gateway tools are denied in sandbox mode.</li>
+    <li><strong>Auth token rotation</strong> — Gateway tokens, channel tokens, and model API keys all support rotation.</li>
+    <li><strong>Secret storage</strong> — credentials in <code>~/.openclaw/credentials/</code> with <code>chmod 600</code>. Never committed to git.</li>
+    <li><strong>SSRF protection</strong> — fetch tool blocks private network access by default.</li>
+    <li><strong>Send policies</strong> — rules can prevent the agent from sending messages to specific channels, chat types, or session key patterns.</li>
+  </ul>
+</div>
+
+<!-- ============================================ -->
+<!-- COMPLETE MESSAGE FLOW -->
+<!-- ============================================ -->
+<h2 id="msg-flow">End-to-End Message Flow</h2>
+<p>This diagram traces a single message from arrival to response delivery, touching every subsystem.</p>
+
+<div class="diagram-container">
+  <div class="diagram-title">Complete Message Flow — 16 Steps</div>
+  <svg viewBox="0 0 1000 680" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1000" height="680" fill="#0d1117" rx="8"/>
+
+    <!-- Steps as a vertical flow with two columns -->
+    <!-- Left column: Steps 1-8 -->
+    <rect x="30" y="20" width="420" height="40" rx="8" fill="#1f4068" stroke="#79c0ff" stroke-width="2"/>
+    <text x="40" y="44" fill="#ffa657" font-size="12" font-weight="700">1</text>
+    <text x="60" y="44" fill="#79c0ff" font-size="11" font-weight="600">User sends "Check my calendar" on WhatsApp</text>
+
+    <line x1="240" y1="60" x2="240" y2="75" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="30" y="75" width="420" height="36" rx="6" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="40" y="97" fill="#ffa657" font-size="12" font-weight="700">2</text>
+    <text x="60" y="97" fill="#d2a8ff" font-size="10">WhatsApp extension receives message via Baileys WebSocket</text>
+
+    <line x1="240" y1="111" x2="240" y2="126" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+    <rect x="30" y="126" width="420" height="36" rx="6" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="40" y="148" fill="#ffa657" font-size="12" font-weight="700">3</text>
+    <text x="60" y="148" fill="#d2a8ff" font-size="10">Extension normalizes → standard message envelope</text>
+
+    <line x1="240" y1="162" x2="240" y2="177" stroke="#f85149" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <rect x="30" y="177" width="420" height="36" rx="6" fill="#1c2333" stroke="#f85149"/>
+    <text x="40" y="199" fill="#ffa657" font-size="12" font-weight="700">4</text>
+    <text x="60" y="199" fill="#f85149" font-size="10">Access control: dmPolicy=allowlist → check allowFrom → PASS</text>
+
+    <line x1="240" y1="213" x2="240" y2="228" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <rect x="30" y="228" width="420" height="36" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="40" y="250" fill="#ffa657" font-size="12" font-weight="700">5</text>
+    <text x="60" y="250" fill="#ffa657" font-size="10">Binding rules → route to agent "jarvis"</text>
+
+    <line x1="240" y1="264" x2="240" y2="279" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <rect x="30" y="279" width="420" height="36" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="40" y="301" fill="#ffa657" font-size="12" font-weight="700">6</text>
+    <text x="60" y="301" fill="#ffa657" font-size="10">Session key: whatsapp:+919765071249 → resume JSONL</text>
+
+    <line x1="240" y1="315" x2="240" y2="330" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <rect x="30" y="330" width="420" height="50" rx="6" fill="#1c2333" stroke="#ffa657"/>
+    <text x="40" y="352" fill="#ffa657" font-size="12" font-weight="700">7</text>
+    <text x="60" y="349" fill="#ffa657" font-size="10">Assemble system prompt:</text>
+    <text x="60" y="365" fill="#8b949e" font-size="8">SOUL.md + IDENTITY.md + USER.md + AGENTS.md + TOOLS.md + Skills + History</text>
+
+    <line x1="240" y1="380" x2="240" y2="395" stroke="#ffa657" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+    <rect x="30" y="395" width="420" height="36" rx="6" fill="#2a1a1a" stroke="#f85149" stroke-width="2"/>
+    <text x="40" y="417" fill="#ffa657" font-size="12" font-weight="700">8</text>
+    <text x="60" y="417" fill="#f85149" font-size="11" font-weight="600">Call Claude Opus 4.6 API (streaming)</text>
+
+    <!-- Right column: Steps 9-16 -->
+    <line x1="240" y1="431" x2="240" y2="446" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+    <rect x="30" y="446" width="420" height="36" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="40" y="468" fill="#ffa657" font-size="12" font-weight="700">9</text>
+    <text x="60" y="468" fill="#3fb950" font-size="10">AI responds with tool call: exec("gcalcli today")</text>
+
+    <rect x="520" y="446" width="440" height="36" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="530" y="468" fill="#ffa657" font-size="12" font-weight="700">10</text>
+    <text x="555" y="468" fill="#3fb950" font-size="10">Gateway executes: pi-tools.before-tool-call → exec.js → shell</text>
+    <line x1="740" y1="482" x2="740" y2="497" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+
+    <rect x="520" y="497" width="440" height="36" rx="6" fill="#162e16" stroke="#3fb950"/>
+    <text x="530" y="519" fill="#ffa657" font-size="12" font-weight="700">11</text>
+    <text x="555" y="519" fill="#3fb950" font-size="10">Tool result returned to AI: "10am: Team standup, 2pm: Dentist..."</text>
+    <line x1="740" y1="533" x2="740" y2="548" stroke="#f85149" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <rect x="520" y="548" width="440" height="36" rx="6" fill="#2a1a1a" stroke="#f85149"/>
+    <text x="530" y="570" fill="#ffa657" font-size="12" font-weight="700">12</text>
+    <text x="555" y="570" fill="#f85149" font-size="10">AI generates final text response (no more tool calls)</text>
+    <line x1="740" y1="584" x2="740" y2="599" stroke="#d2a8ff" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+    <rect x="520" y="599" width="440" height="36" rx="6" fill="#1c2333" stroke="#d2a8ff"/>
+    <text x="530" y="621" fill="#ffa657" font-size="12" font-weight="700">13</text>
+    <text x="555" y="621" fill="#d2a8ff" font-size="10">Block streaming: chunk response for WhatsApp (4096 char limit)</text>
+    <line x1="740" y1="635" x2="740" y2="650" stroke="#79c0ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <rect x="520" y="650" width="220" height="24" rx="4" fill="#1c2333" stroke="#ffa657"/>
+    <text x="530" y="667" fill="#ffa657" font-size="10"><tspan font-weight="700">14</tspan> Delivery queue</text>
+    <rect x="750" y="650" width="210" height="24" rx="4" fill="#1a1a2e" stroke="#d2a8ff"/>
+    <text x="760" y="667" fill="#d2a8ff" font-size="10"><tspan font-weight="700">15</tspan> WhatsApp plugin → send</text>
+
+    <!-- Final -->
+    <rect x="30" y="500" width="420" height="36" rx="8" fill="#1f4068" stroke="#79c0ff" stroke-width="2"/>
+    <text x="40" y="522" fill="#ffa657" font-size="12" font-weight="700">16</text>
+    <text x="60" y="522" fill="#79c0ff" font-size="11" font-weight="600">User sees: "Your calendar today: 10am Standup, 2pm Dentist..."</text>
+
+    <line x1="450" y1="465" x2="520" y2="465" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="4" marker-end="url(#arrow-green)"/>
+  </svg>
+</div>
+
+<!-- ============================================ -->
+<!-- WORKSPACE FILES -->
+<!-- ============================================ -->
+<h2 id="workspace-files">Workspace Files Reference</h2>
+<p>Every agent's workspace contains these files that define its identity, behavior, and memory.</p>
+
+<table>
+  <tr><th>File</th><th>Purpose</th><th>Layman Analogy</th><th>Loaded When</th></tr>
+  <tr><td><code>SOUL.md</code></td><td>Core personality, values, behavioral boundaries</td><td>DNA / Constitution</td><td>Every session</td></tr>
+  <tr><td><code>IDENTITY.md</code></td><td>Name, creature type, vibe, emoji, avatar</td><td>Birth certificate</td><td>Every session</td></tr>
+  <tr><td><code>USER.md</code></td><td>Owner's name, timezone, preferences, communication style</td><td>Relationship contract</td><td>Every session</td></tr>
+  <tr><td><code>AGENTS.md</code></td><td>Detailed operating manual: protocols, projects, rules, sub-agents</td><td>Employee handbook</td><td>Every session</td></tr>
+  <tr><td><code>TOOLS.md</code></td><td>Environment-specific tool notes (SSH hosts, camera names, Tailscale)</td><td>Personal cheat sheet</td><td>Every session</td></tr>
+  <tr><td><code>MEMORY.md</code></td><td>Persistent memory: validated patterns, history, facts</td><td>Long-term memory</td><td>Every session</td></tr>
+  <tr><td><code>HEARTBEAT.md</code></td><td>Tasks to check periodically (every N minutes)</td><td>Recurring reminders</td><td>On heartbeat</td></tr>
+  <tr><td><code>VAULT.md</code></td><td>API key reference (not the keys themselves)</td><td>Key ring (labels only)</td><td>Every session</td></tr>
+  <tr><td><code>BOOTSTRAP.md</code></td><td>First-run onboarding conversation script</td><td>Day-1 orientation</td><td>Only first session</td></tr>
+</table>
+
+<!-- ============================================ -->
+<!-- EXTENSIONS LIST -->
+<!-- ============================================ -->
+<h2 id="extensions-list">All 44 Extensions</h2>
+<p>Extensions are plugins that add capabilities. Channel extensions connect to messaging platforms; other extensions add features like memory, voice, diagnostics, and device control.</p>
+
+<div class="components">
+  <div class="component"><h4>whatsapp</h4><p>Baileys-based WhatsApp Web connection. QR login, multi-device, media, reactions, groups.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>telegram</h4><p>grammY-based Telegram bot. Long polling or webhooks. Inline buttons, groups, media.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>discord</h4><p>discord.js-based. Slash commands, threads, embeds, reactions, guilds, voice channels.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>slack</h4><p>Bolt SDK. Socket Mode. App mentions, threads, blocks, file uploads.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>signal</h4><p>signal-cli bridge. E2E encrypted messaging. Groups, media, reactions.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>bluebubbles</h4><p>Recommended iMessage integration via BlueBubbles server. Webhook-based.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>imessage</h4><p>Legacy macOS-only iMessage via imsg CLI. Direct Messages.app integration.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>msteams</h4><p>Microsoft Teams via Bot Framework. Channels, group chats, adaptive cards.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>matrix</h4><p>Matrix protocol. Encrypted rooms, federation, bridges.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>googlechat</h4><p>Google Chat API. Spaces, threads, cards.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>feishu</h4><p>Feishu/Lark. Bots, groups, rich messages.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>irc</h4><p>IRC client. Channels, private messages, traditional chat.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>line</h4><p>LINE Messaging API. Rich menus, stickers, groups.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>mattermost</h4><p>Mattermost API. Channels, threads, webhooks.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>nostr</h4><p>Nostr protocol. Decentralized messaging, relays.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>twitch</h4><p>Twitch chat bot. Channel messages, commands.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>zalo / zalouser</h4><p>Zalo (Vietnam) official + personal accounts.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>nextcloud-talk</h4><p>Nextcloud Talk integration.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>synology-chat</h4><p>Synology Chat integration.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>tlon</h4><p>Tlon (Urbit) messaging.</p><span class="tag">Channel</span></div>
+  <div class="component"><h4>memory-core / memory-lancedb</h4><p>Persistent memory with vector search. LanceDB for embedding storage.</p><span class="tag">Capability</span></div>
+  <div class="component"><h4>talk-voice</h4><p>Continuous voice mode. ElevenLabs TTS + system TTS fallback.</p><span class="tag">Capability</span></div>
+  <div class="component"><h4>voice-call</h4><p>Outbound phone calls via ElevenLabs voice agents.</p><span class="tag">Capability</span></div>
+  <div class="component"><h4>device-pair</h4><p>Device pairing protocol for macOS/iOS/Android nodes.</p><span class="tag">Infrastructure</span></div>
+  <div class="component"><h4>phone-control</h4><p>Phone control commands (Android: SMS, notifications, location).</p><span class="tag">Capability</span></div>
+  <div class="component"><h4>diagnostics-otel</h4><p>OpenTelemetry diagnostics and tracing.</p><span class="tag">Operations</span></div>
+  <div class="component"><h4>diffs</h4><p>Diff tracking for code changes.</p><span class="tag">Capability</span></div>
+  <div class="component"><h4>thread-ownership</h4><p>Thread ownership tracking for multi-user scenarios.</p><span class="tag">Infrastructure</span></div>
+  <div class="component"><h4>copilot-proxy</h4><p>GitHub Copilot OAuth token proxy for model auth.</p><span class="tag">Auth</span></div>
+  <div class="component"><h4>google-gemini-cli-auth</h4><p>Google Gemini CLI authentication bridge.</p><span class="tag">Auth</span></div>
+  <div class="component"><h4>minimax-portal-auth / qwen-portal-auth</h4><p>MiniMax and Qwen model portal authentication.</p><span class="tag">Auth</span></div>
+  <div class="component"><h4>ollama / vllm / sglang</h4><p>Local model backends: Ollama, vLLM, SGLang integration.</p><span class="tag">Model Backend</span></div>
+  <div class="component"><h4>lobster / acpx / open-prose / llm-task</h4><p>Advanced workflow, prose, and task orchestration extensions.</p><span class="tag">Advanced</span></div>
+  <div class="component"><h4>shared / test-utils</h4><p>Shared utilities and test infrastructure for extension development.</p><span class="tag">Development</span></div>
+</div>
+
+<!-- ============================================ -->
+<!-- SKILLS LIST -->
+<!-- ============================================ -->
+<h2 id="skills-list">All 52 Built-in Skills</h2>
+
+<table>
+  <tr><th>Skill</th><th>What it teaches the agent</th><th>Category</th></tr>
+  <tr><td>1password</td><td>Manage secrets via 1Password CLI</td><td>Security</td></tr>
+  <tr><td>apple-notes</td><td>Create/search/manage Apple Notes via memo CLI</td><td>Productivity</td></tr>
+  <tr><td>apple-reminders</td><td>Manage Apple Reminders via remindctl CLI</td><td>Productivity</td></tr>
+  <tr><td>bear-notes</td><td>Manage Bear notes via grizzly CLI</td><td>Productivity</td></tr>
+  <tr><td>blogwatcher</td><td>Monitor RSS/Atom feeds for updates</td><td>Monitoring</td></tr>
+  <tr><td>blucli</td><td>Control BluOS speakers</td><td>Home</td></tr>
+  <tr><td>bluebubbles</td><td>iMessage via BlueBubbles</td><td>Messaging</td></tr>
+  <tr><td>camsnap</td><td>Capture from RTSP/ONVIF cameras</td><td>Hardware</td></tr>
+  <tr><td>canvas</td><td>Canvas rendering operations</td><td>UI</td></tr>
+  <tr><td>clawhub</td><td>Install/update skills from ClawHub marketplace</td><td>Skills</td></tr>
+  <tr><td>coding-agent</td><td>Run Codex/Claude Code/Pi via background process</td><td>Dev Tools</td></tr>
+  <tr><td>discord</td><td>Discord operations via message tool</td><td>Messaging</td></tr>
+  <tr><td>eightctl</td><td>Control Eight Sleep smart mattress</td><td>Home</td></tr>
+  <tr><td>gemini</td><td>Gemini CLI for Q&A and generation</td><td>AI</td></tr>
+  <tr><td>gh-issues</td><td>GitHub Issues management</td><td>Dev Tools</td></tr>
+  <tr><td>gifgrep</td><td>Search GIF providers</td><td>Media</td></tr>
+  <tr><td>github</td><td>Full GitHub CLI (issues, PRs, runs)</td><td>Dev Tools</td></tr>
+  <tr><td>gog</td><td>Google Workspace (Gmail, Calendar, Drive, Sheets)</td><td>Productivity</td></tr>
+  <tr><td>goplaces</td><td>Google Places API search</td><td>Location</td></tr>
+  <tr><td>healthcheck</td><td>Host security hardening</td><td>Security</td></tr>
+  <tr><td>himalaya</td><td>Email via IMAP/SMTP</td><td>Communication</td></tr>
+  <tr><td>imsg</td><td>iMessage/SMS CLI</td><td>Messaging</td></tr>
+  <tr><td>mcporter</td><td>MCP server management</td><td>Infrastructure</td></tr>
+  <tr><td>model-usage</td><td>Per-model cost/usage tracking</td><td>Operations</td></tr>
+  <tr><td>nano-banana-pro</td><td>Gemini 3 Pro image generation</td><td>Media</td></tr>
+  <tr><td>nano-pdf</td><td>PDF editing via CLI</td><td>Documents</td></tr>
+  <tr><td>notion</td><td>Notion API (pages, databases, blocks)</td><td>Productivity</td></tr>
+  <tr><td>obsidian</td><td>Obsidian vault management</td><td>Productivity</td></tr>
+  <tr><td>openai-image-gen</td><td>OpenAI DALL-E image generation</td><td>Media</td></tr>
+  <tr><td>openai-whisper</td><td>Local speech-to-text (no API)</td><td>Audio</td></tr>
+  <tr><td>openai-whisper-api</td><td>Cloud speech-to-text via API</td><td>Audio</td></tr>
+  <tr><td>openhue</td><td>Philips Hue light control</td><td>Home</td></tr>
+  <tr><td>oracle</td><td>Oracle CLI for prompt bundling</td><td>AI</td></tr>
+  <tr><td>ordercli</td><td>Food delivery order tracking</td><td>Lifestyle</td></tr>
+  <tr><td>peekaboo</td><td>macOS UI automation</td><td>Automation</td></tr>
+  <tr><td>sag</td><td>ElevenLabs TTS (say-like UX)</td><td>Audio</td></tr>
+  <tr><td>session-logs</td><td>Search/analyze session logs via jq</td><td>Operations</td></tr>
+  <tr><td>sherpa-onnx-tts</td><td>Local offline TTS</td><td>Audio</td></tr>
+  <tr><td>skill-creator</td><td>Create/package new skills</td><td>Skills</td></tr>
+  <tr><td>slack</td><td>Slack operations (react, pin, etc.)</td><td>Messaging</td></tr>
+  <tr><td>songsee</td><td>Audio spectrogram visualization</td><td>Media</td></tr>
+  <tr><td>sonoscli</td><td>Sonos speaker control</td><td>Home</td></tr>
+  <tr><td>spotify-player</td><td>Spotify playback and search</td><td>Media</td></tr>
+  <tr><td>summarize</td><td>Summarize URLs, podcasts, files</td><td>Productivity</td></tr>
+  <tr><td>things-mac</td><td>Things 3 task management</td><td>Productivity</td></tr>
+  <tr><td>tmux</td><td>Remote-control tmux sessions</td><td>Dev Tools</td></tr>
+  <tr><td>trello</td><td>Trello board management</td><td>Productivity</td></tr>
+  <tr><td>video-frames</td><td>Extract frames/clips from video</td><td>Media</td></tr>
+  <tr><td>voice-call</td><td>Outbound phone calls</td><td>Communication</td></tr>
+  <tr><td>wacli</td><td>WhatsApp history search/sync</td><td>Messaging</td></tr>
+  <tr><td>weather</td><td>Weather forecasts (no API key)</td><td>Information</td></tr>
+  <tr><td>xurl</td><td>URL resolution and expansion</td><td>Utility</td></tr>
+</table>
+
+<!-- ============================================ -->
+<!-- MODULE MAP -->
+<!-- ============================================ -->
+<h2 id="module-map">625 Source Module Map</h2>
+<p>The compiled <code>dist/</code> directory contains 625 JavaScript modules. Here's how they group by subsystem:</p>
+
+<table>
+  <tr><th>Subsystem</th><th>Key Modules</th><th>Purpose</th></tr>
+  <tr><td>Agent Runtime</td><td>agent.js, agent-scope.js, register.agent.js, subagent-registry-runtime.js</td><td>LLM orchestration, workspace scoping, sub-agent management</td></tr>
+  <tr><td>Sessions</td><td>session.js, session-key.js, session-cost-usage.js, sessions.js, compact.runtime.js</td><td>Session lifecycle, key derivation, compaction, cost tracking</td></tr>
+  <tr><td>Gateway</td><td>server.js, gateway-cli.js, gateway-rpc.js, health.js, daemon.js, daemon-runtime.js</td><td>WS server, RPC dispatch, health checks, service management</td></tr>
+  <tr><td>Channels</td><td>outbound.js, deliver-runtime.js, deps-send-*.runtime.js (×5 channels), channel-routing.js</td><td>Message routing, delivery, per-channel send logic</td></tr>
+  <tr><td>Models/Auth</td><td>models.js, auth-profiles.js, auth-choice.js, auth-token.js, pi-model-discovery-runtime.js</td><td>Model selection, auth rotation, failover, cooldowns</td></tr>
+  <tr><td>WhatsApp</td><td>whatsapp-actions.js (×7), runtime-whatsapp-*.js (×12), login-qr.js</td><td>WhatsApp-specific: login, outbound, actions, QR flow</td></tr>
+  <tr><td>Config</td><td>config.js, config-cli.js, config-guard.js, config-validation.js, env.js, env-overrides.js</td><td>JSON5 config, validation, hot reload, env substitution</td></tr>
+  <tr><td>Tools</td><td>exec.js, fetch.js, browser-cli.js, dangerous-tools.js, pi-tools.before-tool-call.runtime.js</td><td>Tool execution, safety classification, pre-processing</td></tr>
+  <tr><td>Skills</td><td>skill-scanner.js, skills.js, skills-cli.js, skills-install.js, skills-status.js</td><td>Skill discovery, loading, installation, status</td></tr>
+  <tr><td>Automation</td><td>cron-cli.js, webhooks-cli.js, heartbeat-visibility.js, command-poll-backoff.js</td><td>Cron scheduling, webhook ingress, heartbeats, polling</td></tr>
+  <tr><td>Nodes/Devices</td><td>node-cli.js, node-commands.js, node-service.js, device-pairing.js, push-apns.js</td><td>Device management, pairing, command execution, push notifications</td></tr>
+  <tr><td>Web/UI</td><td>web.js, control-ui-assets.js, channel-web.js</td><td>Control UI, WebChat, static asset serving</td></tr>
+  <tr><td>CLI</td><td>program.js, command-registry.js, register.*.js (×12), cli-utils.js, clack-prompter.js</td><td>Command routing, interactive prompts, all subcommands</td></tr>
+  <tr><td>Media</td><td>image-runtime.js (×6), audio-preflight.js (×6), query-expansion.js (×6)</td><td>Image processing, audio transcription, search expansion</td></tr>
+  <tr><td>Onboarding</td><td>onboard.js, onboard-channels.js, onboard-config.js, onboard-skills.js, onboard-hooks.js</td><td>Wizard flow: setup channels, config, skills, hooks</td></tr>
+  <tr><td>Security</td><td>security-cli.js, audit.js, sandbox-cli.js, mutable-allowlist-detectors.js, path-safety.js</td><td>Security audit, sandboxing, path guards</td></tr>
+  <tr><td>Networking</td><td>bonjour-discovery.js, widearea-dns.js, dns-cli.js, ports.js, ipv4.js</td><td>mDNS discovery, DNS, port management</td></tr>
+  <tr><td>Streaming</td><td>slash-commands.runtime.js (×6), slash-dispatch.runtime.js (×6), manager.runtime.js (×6)</td><td>Block streaming, chat commands, response management</td></tr>
+  <tr><td>Plugin System</td><td>plugin-registry.js, extensionAPI.js, plugin-install-plan.js, plugins.js, plugins-cli.js</td><td>Extension loading, SDK, lifecycle management</td></tr>
+</table>
+
+<div class="key-insight">
+  <p><strong>OpenClaw is not a simple chatbot wrapper.</strong> With 625 compiled modules, 44 extensions, 52 skills, and 14 core subsystems, it's a full-fledged <strong>personal AI operating system</strong>. It handles everything from WebSocket protocol management to APNS push notifications, from cron scheduling to Docker sandboxing, from WhatsApp QR login to OpenTelemetry diagnostics. The architecture is designed around a single control plane (the Gateway) with a plugin-based extension system that keeps the core clean while supporting an enormous surface area of integrations.</p>
+</div>
+
+</div><!-- /main -->
+</body>
+</html>
